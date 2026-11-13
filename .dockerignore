@@ -1,0 +1,15 @@
+.git
+.idea
+.vscode
+.DS_Store
+target/
+**/target/
+*.log
+.env
+.env.local
+.env.*.local
+frontend/
+docs/
+infra/
+README.md
+PLAN.md

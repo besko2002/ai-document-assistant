@@ -1,0 +1,60 @@
+services:
+  postgres:
+    # Built from infra/postgres so the pgvector init script is baked into the image.
+    # (Docker Desktop cannot bind-mount paths under ~/Downloads on this machine,
+    #  so /docker-entrypoint-initdb.d content is COPYied in instead of mounted.)
+    build:
+      context: ./infra/postgres
+    image: ai-document-assistant-postgres:pg16
+    container_name: ai-document-assistant-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: docassistant
+      POSTGRES_USER: doc
+      POSTGRES_PASSWORD: doc
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doc -d docassistant"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # ------------------------------------------------------------------ application (profile "app")
+  #   docker compose --profile app up -d --build      ->  http://localhost:5174
+  # Plain `docker compose up -d` starts only Postgres (run the backend/frontend on the host).
+  backend:
+    profiles: ["app"]
+    build: { context: . }
+    image: ai-document-assistant-backend:local
+    container_name: ai-document-assistant-backend
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/docassistant
+      DB_USERNAME: doc
+      DB_PASSWORD: doc
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+    ports: ["8090:8090"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    mem_limit: 512m
+
+  frontend:
+    profiles: ["app"]
+    build: { context: ./frontend }
+    image: ai-document-assistant-frontend:local
+    container_name: ai-document-assistant-frontend
+    restart: unless-stopped
+    ports: ["5174:80"]
+    depends_on:
+      backend: { condition: service_healthy }
+    mem_limit: 64m
+
+volumes:
+  postgres-data:
+    name: ai-document-assistant-postgres-data
